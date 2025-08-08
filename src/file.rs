@@ -2,25 +2,41 @@ use std::path::Path;
 use walkdir::WalkDir;
 
 
-pub fn visit_all_files<F>(file_path: &str, mut f: F)
-where
-    F: FnMut(&Path),
-{
-    let path = Path::new(file_path);
+pub struct FileVisitor {
+    root_path: String,
+}
 
-    if path.is_dir() {
-        for entry in WalkDir::new(path).into_iter()
-        {
-            let item = entry.unwrap();
-            if item.path().is_file() {
-                f(item.path());
-            } else {
-                println!("{} is not a file", item.path().display());
-            }
+impl FileVisitor {
+    pub fn new(root_path: String) -> Self {
+        Self {
+            root_path,
         }
-    } else if path.is_file() {
-        f(path);
-    } else {
-        println!("Not a folder: {}", path.display());
+    }
+
+    fn visit<F>(&self, mut f: F)
+    where
+        F: FnMut(&Path),
+    {
+        let path = Path::new(self.root_path.as_str());
+        for entry in WalkDir::new(path).into_iter() {
+            f(entry.unwrap().path());
+        }
+    }
+
+    pub fn count_files(&self) -> usize {
+        let mut total = 0;
+        self.visit_file(|_p| { total += 1 });
+        total
+    }
+
+    pub fn visit_file<F>(&self, mut f: F)
+    where
+        F: FnMut(&Path),
+    {
+        self.visit(|p| {
+            if p.is_file() {
+                f(p)
+            }
+        });
     }
 }
