@@ -108,27 +108,21 @@ impl eframe::App for MainWindow {
                     });
             });
 
-        // Show popup window if encrypting
+        // Show popup window if encrypting or decrypting
         if self.in_process {
             egui::Window::new("🔄 Encrypting...")
                 .collapsible(false)
                 .resizable(false)
                 .fixed_size(egui::vec2(300.0, 100.0))
                 .show(ctx, |ui| {
-                    // if let Some(start) = self.start_time {
-                        // let elapsed = start.elapsed().as_secs_f32();
-                        // self.progress = (elapsed / 5.0).min(1.0);
                     ui.add(egui::ProgressBar::new(self.progress).show_percentage());
 
                     if self.progress >= 1.0 {
                         ui.label("✅ Done!");
-                        // self.encrypting = false;
-                        // self.show_progress_window = false;
                         println!("Encryption complete!");
                     } else {
-                        ctx.request_repaint(); // Keep UI updating
+                        ctx.request_repaint(); 
                     }
-                    // }
                 });
             }
     }
