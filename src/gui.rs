@@ -37,6 +37,7 @@ impl MainWindow {
     fn decrpt(&self) {
         println!("Decrypting files in folder: {}", self.folder_path);
         let encrptor = enc_dec::FileEncDecrpytor::new(self.password.clone());
+        
         visit_all_files(&self.folder_path,|p| {
             let origin_file = p.to_str().unwrap();
             if origin_file.ends_with(".enc"){

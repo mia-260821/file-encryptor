@@ -15,13 +15,13 @@ impl FileEncDecrpytor {
     
     pub fn encrpt_file(&self, file_path: &str, save_as: &str) {
         let file_data = fs::read(file_path).unwrap();
-        let ciphertext = encrypt(file_data, &self.password).expect("failed to encrpt file");
+        let ciphertext = encrypt(file_data.as_slice(), &self.password).expect("failed to encrpt file");
         fs::write(format!("{save_as}"), ciphertext).expect("failed to create encryption file");
     }
 
     pub fn decrpt_file(&self, file_path: &str, save_as: &str) {
         let file_data = fs::read(file_path).unwrap();
-        let plaintext = decrypt(file_data, &self.password).expect("failed to decrypt file");
+        let plaintext = decrypt(file_data.as_slice(), &self.password).expect("failed to decrypt file");
         fs::write(save_as, plaintext).expect("failed to create decryption file");
     }
 }
@@ -37,7 +37,7 @@ fn derive_key(password: &str, salt: &password_hash::SaltString) -> [u8; 32] {
     key
 }
 
-fn encrypt(file_data: Vec<u8>, password: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+fn encrypt(file_data: &[u8], password: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     // Generate random salt and nonce
     let salt = password_hash::SaltString::generate(&mut aead::OsRng);
     let nonce_bytes = {
@@ -49,21 +49,22 @@ fn encrypt(file_data: Vec<u8>, password: &str) -> Result<Vec<u8>, Box<dyn std::e
     let key = derive_key(password, &salt);
     let cipher = ChaCha20Poly1305::new(&key.into());
     let nonce = Nonce::from_slice(&nonce_bytes);
-    let ciphertext = cipher.encrypt(nonce, file_data.as_ref()).unwrap();
+    let ciphertext = cipher.encrypt(nonce, file_data).unwrap();
 
-    // File format: [salt (16)] + [nonce (12)] + [ciphertext]
+    // File format: [salt] + [nonce (12)] + [ciphertext]
     let salt_b64 = salt.as_str();
     let salt_len = salt_b64.len() as u8;
     let mut output = vec![salt_len];       
-    output.extend_from_slice(salt_b64.as_bytes()); 
+    output.extend_from_slice(&salt_b64.as_bytes()); 
     output.extend_from_slice(&nonce_bytes); 
     output.extend_from_slice(&ciphertext);
 
     Ok(output)
 }
 
-fn decrypt(encrypted: Vec<u8>, password: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let (salt_bytes, rest) = encrypted.split_at(16);
+fn decrypt(encrypted: &[u8], password: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let (salt_len, data) = encrypted.split_at(1);
+    let (salt_bytes, rest) = data.split_at(salt_len[0] as usize);
     let (nonce_bytes, ciphertext) = rest.split_at(12);
 
     let salt_str = std::str::from_utf8(salt_bytes).unwrap();
