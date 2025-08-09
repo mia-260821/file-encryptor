@@ -1,6 +1,8 @@
 use eframe::{self, egui};
 use crate::enc_dec;
 use crate::file;
+use std::thread::sleep;
+use std::time::Duration;
 use std::{thread};
 use std::sync::{Mutex, Arc};
 
@@ -43,7 +45,9 @@ where
     file_visitor.visit_file(|p| {
         let origin_file = p.to_str().unwrap();
         let encrypted_file = format!("{}.enc", origin_file);
-        encryptor.encrpt_file(origin_file, encrypted_file.as_str());
+        if let Err(e) = encryptor.encrpt_file(origin_file, encrypted_file.as_str()) {
+            println!("encrypt file {} failed : {}", p.display(), e.to_string());
+        }
         count += 1;
         report_progress((count as f32)/(total as f32));
     });
@@ -64,26 +68,43 @@ where
         let origin_file = p.to_str().unwrap();
         if origin_file.ends_with(".enc"){
             let encrypted_file = &origin_file[..origin_file.len()-4];
-            encryptor.decrpt_file(origin_file, encrypted_file);
-            count += 1;
-            report_progress((count as f32)/(total as f32));
+            if let Err(e) = encryptor.decrpt_file(origin_file, encrypted_file) {
+                println!("decrypt file {} failed : {}", p.display(), e.to_string());
+            }
         }
+        count += 1;
+        report_progress((count as f32)/(total as f32));
     });
 }
 
+
 impl MainWindow {
 
-    fn on_encrypt(&mut self) {
+    fn set_progress(&self, value: f32) {
+        let progress = self.progress.clone();
+        let mut res = progress.lock().unwrap();
+        *res = Some(value);
+    }
+
+    fn start_task(&mut self) {
+        self.in_process = true;
+        self.set_progress(0.0);
+    }
+
+    fn on_encrypt(&self) {
         let password = self.password.clone();
         let from_path = self.folder_or_file.clone();
 
         let progress = self.progress.clone();
         thread::spawn(move || {
             encrpt(password, from_path, |val| {
-                // Store result
                 let mut res = progress.lock().unwrap();
                 *res = Some(val);
             });
+            sleep(Duration::new(1, 0));
+            let mut res = progress.lock().unwrap();
+            *res = None;
+            println!("Encryption finished");
         });
     }
     
@@ -94,10 +115,13 @@ impl MainWindow {
         let progress = self.progress.clone();
         thread::spawn(move || {
             decrpt(password, from_path, |val| {
-                // Store result
                 let mut res = progress.lock().unwrap();
                 *res = Some(val);
             });
+            sleep(Duration::new(1, 0));
+            let mut res = progress.lock().unwrap();
+            *res = None;
+            println!("Decryption finished");
         });
     }
 }
@@ -172,16 +196,15 @@ impl eframe::App for MainWindow {
                             let encrypt_button = egui::Button::new("Encrypt Files")
                                 .min_size(egui::Vec2::new(132.0, 24.0));
                             if ui.add(encrypt_button).clicked() {
-                                self.in_process = true;
+                                self.start_task();
                                 self.on_encrypt();
-                                
                             }
                             // decrpytion button
                             ui.add_space(32.0);
                             let decrpyt_button = egui::Button::new("Decrypt Files")
                                 .min_size(egui::Vec2::new(132.0, 24.0));
                             if ui.add(decrpyt_button).clicked() {
-                                self.in_process = true;
+                                self.start_task();
                                 self.on_decrypt();
                             }
                         });
@@ -190,19 +213,17 @@ impl eframe::App for MainWindow {
 
         // Show popup window if encrypting or decrypting
         if self.in_process {
-            let progress = (*self.progress.lock().unwrap()).unwrap();
+            let progress = *self.progress.lock().unwrap();
             egui::Window::new("🔄 Encrypting...")
                 .collapsible(false)
                 .resizable(false)
                 .fixed_size(egui::vec2(300.0, 100.0))
                 .show(ctx, |ui| {
-                    ui.add(egui::ProgressBar::new(progress).show_percentage());
-                    if progress >= 1.0 {
-                        ui.label("✅ Done!");
-                        println!("");
+                    if let Some(val) = progress {
+                        ui.add(egui::ProgressBar::new(val).show_percentage());
+                    } else {
                         self.in_process = false;
                     }
-                    
                     ctx.request_repaint();
                 });
             }
